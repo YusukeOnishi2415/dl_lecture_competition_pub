@@ -11,6 +11,34 @@ import torch.nn as nn
 import torchvision
 from torchvision import transforms
 
+class gcn():
+    def __init__(self):
+        pass
+
+    def __call__(self, x):
+        mean = torch.mean(x)
+        std = torch.std(x)
+        return (x - mean)/(std + 10**(-6))  # 0除算を防ぐ
+
+
+# 標準化後の画像を[0, 1]に正規化する
+def deprocess(x):
+    """
+    Argument
+    --------
+    x : np.ndarray
+        入力画像．(H, W, C)
+
+    Return
+    ------
+    _x : np.ndarray
+        [0, 1]で正規化した画像．(H, W, C)
+    """
+    _min = np.min(x)
+    _max = np.max(x)
+    _x = (x - _min)/(_max - _min)
+    return _x
+GCN = gcn()
 
 def set_seed(seed):
     random.seed(seed)
@@ -48,7 +76,8 @@ def process_text(text):
     }
     for contraction, correct in contractions.items():
         text = text.replace(contraction, correct)
-
+    
+        
     # 句読点をスペースに変換
     text = re.sub(r"[^\w\s':]", ' ', text)
 
@@ -286,6 +315,7 @@ def ResNet18():
 def ResNet50():
     return ResNet(BottleneckBlock, [3, 4, 6, 3])
 
+from transformers import BertTokenizer, BertModel
 
 class VQAModel(nn.Module):
     def __init__(self, vocab_size: int, n_answer: int):
@@ -357,17 +387,18 @@ def eval(model, dataloader, optimizer, criterion, device):
 
     return total_loss / len(dataloader), total_acc / len(dataloader), simple_acc / len(dataloader), time.time() - start
 
-
 def main():
     # deviceの設定
-    set_seed(42)
+    set_seed(428)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
 
-    # dataloader / model
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        GCN
     ])
+    
     train_dataset = VQADataset(df_path="./data/train.json", image_dir="./data/train", transform=transform)
     test_dataset = VQADataset(df_path="./data/valid.json", image_dir="./data/valid", transform=transform, answer=False)
     test_dataset.update_dict(train_dataset)
@@ -380,7 +411,7 @@ def main():
     # optimizer / criterion
     num_epoch = 20
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
     # train model
     for epoch in range(num_epoch):
@@ -402,8 +433,8 @@ def main():
 
     submission = [train_dataset.idx2answer[id] for id in submission]
     submission = np.array(submission)
-    torch.save(model.state_dict(), "model.pth")
-    np.save("submission.npy", submission)
+    torch.save(model.state_dict(), "model_2.pth")
+    np.save("submission_2.npy", submission)
 
 if __name__ == "__main__":
     main()
